@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: orqelis
+      POSTGRES_USER: orqelis
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a database password in .env}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orqelis"]
+      interval: 5s
+      retries: 10
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://orqelis:${POSTGRES_PASSWORD}@db/orqelis
+    command: ["/app/.venv/bin/alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+  web:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://orqelis:${POSTGRES_PASSWORD}@db/orqelis
+    ports: ["127.0.0.1:8000:8000"]
+    volumes: ["objects:/app/var/objects"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+  worker:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://orqelis:${POSTGRES_PASSWORD}@db/orqelis
+    command: ["/app/.venv/bin/python", "-m", "app.jobs"]
+    volumes: ["objects:/app/var/objects"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+volumes:
+  postgres:
+  objects:

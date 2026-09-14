@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.env
+var/
+*.db
+*.db-*
+.hypothesis/
+test-results/
+playwright-report/
