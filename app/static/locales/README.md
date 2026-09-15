@@ -4,6 +4,9 @@ English (`en`) is the default. `i18n.js` explicitly allows English, German, Fren
 Spanish, Italian, Dutch, Polish and Portuguese. The selection is stored in
 `localStorage['orqelis.language']`; the server session is independent of this setting.
 Dates and monetary amounts use `Intl` with the selected locale.
+The server fingerprints the UI files and catalogs together and serves them under
+`/static/<content-hash>/`. Templates and catalog requests use that same prefix,
+so an older Cloudflare/browser cache cannot mix assets from different releases.
 
 The JSON catalogs use English source messages as keys, following the gettext
 convention. Keep each complete message together and use numbered placeholders,

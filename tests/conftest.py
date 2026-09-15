@@ -7,6 +7,9 @@ os.environ["ENVIRONMENT"] = "test"
 os.environ["AUTH_PROVIDER"] = "local"
 os.environ["STORAGE_PROVIDER"] = "local"
 os.environ["TED_ENABLED"] = "false"
+os.environ["SUPABASE_URL"] = "https://example.supabase.co"
+os.environ["SUPABASE_ANON_KEY"] = "test-public-key"
+os.environ["SUPABASE_SERVICE_ROLE_KEY"] = "test-service-key"
 
 import pytest
 from fastapi.testclient import TestClient

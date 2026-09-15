@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import logging
 import secrets
@@ -29,6 +30,13 @@ from app.security import BodyLimitMiddleware
 
 log = logging.getLogger("orqelis.http")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+static_directory = Path(__file__).parent / "static"
+asset_digest = hashlib.sha256()
+for asset in sorted(static_directory.rglob("*")):
+    if asset.is_file() and asset.suffix in {".js", ".css", ".json"}:
+        asset_digest.update(asset.relative_to(static_directory).as_posix().encode())
+        asset_digest.update(asset.read_bytes())
+asset_base = "/static/" + asset_digest.hexdigest()[:16]
 
 
 @asynccontextmanager
@@ -104,7 +112,9 @@ app.include_router(router)
 app.include_router(diagnostics_router)
 app.include_router(reviews_router)
 app.add_middleware(BodyLimitMiddleware, limit=settings().max_upload_bytes + 65536)
-app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+# Bind this release's UI files to one content hash, including in CDN/browser caches.
+app.mount(asset_base, StaticFiles(directory=str(static_directory)), name="versioned_static")
+app.mount("/static", StaticFiles(directory=str(static_directory)), name="static")
 rate_windows = defaultdict(deque)
 
 
@@ -274,7 +284,9 @@ def home(request: Request):
 def legal(request: Request, page: str):
     if page not in {"privacy", "terms", "sources"}:
         raise HTTPException(404, "Page not found")
-    return templates.TemplateResponse(request, "legal.html", {"page": page, "config": settings()})
+    return templates.TemplateResponse(
+        request, "legal.html", {"page": page, "config": settings(), "assets": asset_base}
+    )
 
 
 @app.get("/{page:path}", response_class=HTMLResponse)
@@ -291,4 +303,6 @@ def ui(request: Request, page: str):
         "settings",
     } and not (page.startswith("opportunities/") and len(page.split("/")) == 2):
         raise HTTPException(404, "Page not found")
-    return templates.TemplateResponse(request, "app.html", {"config": settings(), "page": page})
+    return templates.TemplateResponse(
+        request, "app.html", {"config": settings(), "page": page, "assets": asset_base}
+    )

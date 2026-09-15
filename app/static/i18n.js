@@ -26,7 +26,7 @@ const I18N = (() => {
     return text;
   }
   async function load(code) {
-    const response=await fetch('/static/locales/'+code+'.json');
+    const response=await fetch((document.body?.dataset.assets || '/static')+'/locales/'+code+'.json');
     if(!response.ok) throw new Error('Language catalog unavailable');
     return response.json();
   }

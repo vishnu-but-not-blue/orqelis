@@ -30,9 +30,14 @@ def test_explicit_ui_messages_have_catalog_entries():
 def test_language_assets_served_with_existing_security_headers(client):
     response = client.get("/login")
     assert 'id="language"' in response.text
-    assert "/static/i18n.js" in response.text
+    assert re.search(r"/static/[a-f0-9]{16}/i18n.js", response.text)
     assert "script-src 'self'" in response.headers["content-security-policy"]
     assert "unsafe-eval" not in response.headers["content-security-policy"]
+    versioned = re.search(r"/static/[a-f0-9]{16}", response.text).group()
+    for filename in ["app.js", "review.js", "i18n.js", "i18n.css", "locales/de.json"]:
+        asset = client.get(f"{versioned}/{filename}")
+        assert asset.status_code == 200
+        assert asset.content == Path("app/static", filename).read_bytes()
     for language in LANGUAGES:
         response = client.get(f"/static/locales/{language}.json")
         assert response.status_code == 200
