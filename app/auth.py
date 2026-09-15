@@ -3,6 +3,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+import httpx
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 
@@ -60,24 +61,102 @@ class LocalAuthProvider:
             db.delete(session)
 
 
-class FirebaseAuthProvider:
-    """Production identity adapter for Firebase Auth (Phase 10 boundary).
-    Activated when auth_provider is 'firebase' and credentials are provided.
+class SupabaseAuthProvider:
+    """Production identity adapter for Supabase Auth (Phase 10 boundary).
+    Validates Supabase JWTs (via HS256 secret or Supabase /auth/v1/user endpoint).
     """
 
-    def __init__(self, project_id: str | None = None):
-        self.project_id = project_id or settings().internal_token
+    def __init__(
+        self,
+        jwt_secret: str | None = None,
+        supabase_url: str | None = None,
+        anon_key: str | None = None,
+    ):
+        self.jwt_secret = jwt_secret or settings().supabase_jwt_secret
+        self.supabase_url = (supabase_url or settings().supabase_url).rstrip("/")
+        self.anon_key = anon_key or settings().supabase_anon_key
+
+    def request_code(self, email: str, name: str):
+        try:
+            response = httpx.post(
+                f"{self.supabase_url}/auth/v1/otp",
+                headers={"apikey": self.anon_key},
+                json={"email": email, "create_user": True, "data": {"full_name": name}},
+                timeout=15,
+            )
+        except httpx.HTTPError:
+            raise HTTPException(
+                503, "Sign-in service temporarily unavailable. Please retry."
+            ) from None
+        if response.status_code == 429:
+            raise HTTPException(429, "Please wait before requesting another sign-in email.")
+        if response.status_code not in {200, 201}:
+            raise HTTPException(
+                503, "Unable to send a sign-in code. Contact the operator if this persists."
+            )
+
+    def verify_code(self, db, email: str, code: str):
+        try:
+            response = httpx.post(
+                f"{self.supabase_url}/auth/v1/verify",
+                headers={"apikey": self.anon_key},
+                json={"email": email, "token": code, "type": "email"},
+                timeout=15,
+            )
+        except httpx.HTTPError:
+            raise HTTPException(
+                503, "Sign-in service temporarily unavailable. Please retry."
+            ) from None
+        if response.status_code != 200:
+            raise HTTPException(401, "The sign-in code is invalid or expired.")
+        token = response.json().get("access_token")
+        if not token:
+            raise HTTPException(401, "Sign-in did not return a valid session.")
+        return self.identify(db, token)
 
     def identify(self, db, token: str) -> User:
-        raise HTTPException(
-            501,
-            "Firebase Authentication adapter is ready. "
-            "Configure Firebase project credentials to activate production auth.",
-        )
+        # Supabase verifies signature, issuer, expiry and current identity. Never decode a
+        # JWT as proof of identity, and never authenticate from unverified email metadata.
+        if not self.supabase_url or not self.anon_key:
+            raise HTTPException(503, "Supabase identity is not configured.")
+        try:
+            response = httpx.get(
+                f"{self.supabase_url}/auth/v1/user",
+                headers={"Authorization": f"Bearer {token}", "apikey": self.anon_key},
+                timeout=10,
+            )
+        except httpx.HTTPError:
+            raise HTTPException(503, "Identity service unavailable. Please retry.") from None
+        if response.status_code != 200:
+            raise HTTPException(401, "Invalid or expired authentication token.")
+        data = response.json()
+        if not data.get("id") or not data.get("email") or not data.get("email_confirmed_at"):
+            raise HTTPException(401, "A verified email identity is required.")
+        email = data["email"].lower().strip()
+        subject = "supabase:" + data["id"]
+        user = db.scalar(select(User).where(User.auth_subject == subject))
+        if not user:
+            existing = db.scalar(select(User).where(User.email == email))
+            if existing and existing.auth_subject not in (None, subject):
+                raise HTTPException(409, "This email is already linked to another identity.")
+            user = existing or User(
+                email=email,
+                name=(data.get("user_metadata") or {}).get("full_name") or email.split("@")[0],
+            )
+            user.auth_subject = subject
+            db.add(user)
+            db.flush()
+        return user
 
     def revoke(self, db, user_id: str):
         for session in db.scalars(select(Session).where(Session.user_id == user_id)):
             db.delete(session)
+
+
+def get_auth_provider() -> AuthProvider:
+    if settings().auth_provider == "supabase":
+        return SupabaseAuthProvider()
+    return LocalAuthProvider()
 
 
 def create_session(db, user):

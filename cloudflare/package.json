@@ -1,0 +1,13 @@
+{
+  "name": "orqelis-cloudflare",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs",
+    "dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "dependencies": {"postgres": "3.4.7", "zod": "3.25.76"},
+  "devDependencies": {"wrangler": "4.131.2"}
+}

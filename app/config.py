@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     auth_provider: str = "local"
     storage_provider: str = "local"
     max_upload_bytes: int = 10 * 1024 * 1024
+    document_uploads_enabled: bool = True
+    document_processing_enabled: bool = True
     session_hours: int = 12
     ted_enabled: bool = True
     ted_requests_per_minute: int = 12
@@ -38,9 +40,21 @@ class Settings(BaseSettings):
     retention_days: int = 30
     internal_token: str = ""
     backup_key: str = ""
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_service_role_key: str = ""
+    supabase_jwt_secret: str = ""
+    supabase_project_ref: str = ""
+    supabase_region: str = ""
+    supabase_storage_bucket: str = "documents"
     plans_json: str = '{"FREE":{"analyses":20,"documents":20,"members":3},"SME":{"analyses":300,"documents":200,"members":10},"PRO":{"analyses":1000,"documents":1000,"members":30},"ADVISOR":{"analyses":2000,"documents":2000,"members":50}}'
 
     def validate_deployment(self):
+        if self.auth_provider not in {"local", "supabase"} or self.storage_provider not in {
+            "local",
+            "supabase",
+        }:
+            raise RuntimeError("Unsupported identity or storage provider")
         if self.environment == "production":
             required = [
                 "secret_key",
@@ -55,6 +69,16 @@ class Settings(BaseSettings):
                 missing.append("secret_key (at least 32 characters)")
             if self.auth_provider == "local":
                 missing.append("production identity provider (local auth is development only)")
+            elif self.auth_provider == "supabase" and not (
+                self.supabase_url and self.supabase_anon_key
+            ):
+                missing.append("Supabase Auth configuration (supabase_url, supabase_anon_key)")
+            if self.storage_provider == "supabase" and not (
+                self.supabase_url and self.supabase_service_role_key
+            ):
+                missing.append(
+                    "Supabase Storage configuration (supabase_url, supabase_service_role_key)"
+                )
             if not self.database_url.startswith("postgresql"):
                 missing.append("PostgreSQL database_url")
             if not self.base_url.startswith("https://"):

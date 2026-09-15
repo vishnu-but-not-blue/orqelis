@@ -13,10 +13,14 @@ class Base(DeclarativeBase):
 def make_engine(url):
     if url.startswith("sqlite"):
         Path("var").mkdir(exist_ok=True)
+    pool_kwargs = {}
+    if not url.startswith("sqlite"):
+        pool_kwargs = {"pool_size": 10, "max_overflow": 10, "pool_recycle": 300}
     engine = create_engine(
         url,
         connect_args={"check_same_thread": False} if url.startswith("sqlite") else {},
         pool_pre_ping=True,
+        **pool_kwargs,
     )
     if url.startswith("sqlite"):
 

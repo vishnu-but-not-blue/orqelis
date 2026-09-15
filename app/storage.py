@@ -4,9 +4,12 @@ import re
 import secrets
 import shlex
 import subprocess
+import tempfile
+import time
 from pathlib import Path
 from typing import Protocol
 
+import httpx
 from fastapi import HTTPException
 from pypdf import PdfReader
 
@@ -55,36 +58,84 @@ class LocalStorage:
         return self.root.is_dir()
 
 
-class FirebaseStorage:
-    """Production object storage adapter for Firebase / Google Cloud Storage (Phase 10 boundary).
-    Activated when storage_provider is 'firebase' and bucket credentials are provided.
+class SupabaseStorage:
+    """Production object storage adapter for Supabase Storage (Phase 10 boundary).
+    Stores objects in the Supabase documents bucket via authenticated REST API.
     """
 
     def __init__(self, bucket_name: str | None = None):
-        self.bucket_name = bucket_name or getattr(settings(), "internal_token", "")
+        self.bucket_name = bucket_name or settings().supabase_storage_bucket
+        self.url = settings().supabase_url.rstrip("/")
+        self.key = settings().supabase_service_role_key
+
+    def _headers(self, content_type: str = "application/octet-stream"):
+        return {
+            "Authorization": f"Bearer {self.key}",
+            "apikey": self.key,
+            "Content-Type": content_type,
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        }
 
     def put(self, data: bytes) -> str:
-        raise NotImplementedError(
-            "FirebaseStorage adapter is ready. Configure bucket credentials to activate."
-        )
+        key = secrets.token_hex(32)
+        target_url = f"{self.url}/storage/v1/object/{self.bucket_name}/{key}"
+        res = httpx.post(target_url, headers=self._headers(), content=data, timeout=20)
+        if res.status_code not in (200, 201):
+            raise HTTPException(502, "Private storage upload failed. Please retry.")
+        return key
 
     def get(self, key: str) -> bytes:
-        raise NotImplementedError(
-            "FirebaseStorage adapter is ready. Configure bucket credentials to activate."
+        if not re.fullmatch(r"[a-f0-9]{64}", key):
+            raise ValueError("Invalid object key")
+        target_url = f"{self.url}/storage/v1/object/{self.bucket_name}/{key}"
+        res = httpx.get(
+            target_url,
+            params={"t": int(time.time() * 1000)},
+            headers=self._headers(),
+            timeout=20,
         )
+        if res.status_code == 404 or (
+            res.status_code == 400
+            and any(w in res.text.lower() for w in ["not_found", "nosuchkey"])
+        ):
+            raise KeyError(f"Object not found: {key}")
+        if res.status_code != 200:
+            raise HTTPException(502, "Private storage download failed. Please retry.")
+        return res.content
 
     def delete(self, key: str):
-        raise NotImplementedError(
-            "FirebaseStorage adapter is ready. Configure bucket credentials to activate."
-        )
+        if not re.fullmatch(r"[a-f0-9]{64}", key):
+            raise ValueError("Invalid object key")
+        target_url = f"{self.url}/storage/v1/object/{self.bucket_name}/{key}"
+        response = httpx.delete(target_url, headers=self._headers(), timeout=10)
+        if response.status_code not in {200, 204, 404}:
+            raise HTTPException(
+                502, "Private storage deletion failed; retry before considering this file deleted."
+            )
 
     def metadata(self, key: str) -> dict:
-        raise NotImplementedError(
-            "FirebaseStorage adapter is ready. Configure bucket credentials to activate."
-        )
+        data = self.get(key)
+        return {"size": len(data), "content_hash": hashlib.sha256(data).hexdigest()}
 
     def health(self) -> bool:
-        return bool(self.bucket_name)
+        if not self.url or not self.key:
+            return False
+        try:
+            res = httpx.get(
+                f"{self.url}/storage/v1/bucket/{self.bucket_name}",
+                headers={"Authorization": f"Bearer {self.key}", "apikey": self.key},
+                timeout=5,
+            )
+            return res.status_code == 200 and res.json().get("public") is False
+        except Exception:
+            return False
+
+
+def get_storage() -> ObjectStorage:
+    if settings().storage_provider == "supabase":
+        return SupabaseStorage()
+    return LocalStorage()
 
 
 def validate_upload(data, filename):
@@ -110,20 +161,30 @@ def validate_upload(data, filename):
 
 
 def process_document(storage, doc):
+    if not settings().document_processing_enabled:
+        raise RuntimeError(
+            "Document processing is temporarily disabled; document remains quarantined"
+        )
     data = storage.get(doc.object_key)
     if hashlib.sha256(data).hexdigest() != doc.content_hash:
         raise ValueError("Stored file checksum mismatch")
     command = settings().malware_command
     if command:
-        result = subprocess.run(
-            [*shlex.split(command), str(storage.path(doc.object_key))],
-            shell=False,
-            capture_output=True,
-            timeout=60,
-        )
-        if result.returncode != 0:
+        # Scanner runs on bounded private temporary bytes, independent of storage provider.
+        with tempfile.TemporaryDirectory(prefix="orqelis-scan-") as directory:
+            path = Path(directory) / "upload.bin"
+            path.write_bytes(data)
+            result = subprocess.run(
+                [*shlex.split(command), str(path)],
+                shell=False,
+                capture_output=True,
+                timeout=60,
+            )
+        if result.returncode == 1:
             doc.status = "REJECTED"
             return
+        if result.returncode != 0:
+            raise RuntimeError("Malware scanner unavailable; document remains quarantined")
     elif settings().environment == "production":
         raise RuntimeError("Malware scanner required")
     if doc.mime == "application/pdf":

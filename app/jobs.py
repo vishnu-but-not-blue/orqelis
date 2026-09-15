@@ -30,7 +30,7 @@ from app.models import (
     Watch,
 )
 from app.services import invalidate, run_analysis
-from app.storage import LocalStorage, process_document
+from app.storage import get_storage, process_document
 from app.ted import TedClient, normalize_api, normalize_xml
 
 log = logging.getLogger("orqelis.worker")
@@ -148,7 +148,7 @@ def sweep(db):
             Document.created_at < at - timedelta(days=settings().retention_days),
         )
     ):
-        LocalStorage().delete(doc.object_key)
+        get_storage().delete(doc.object_key)
         db.delete(doc)
     db.commit()
 
@@ -232,7 +232,7 @@ def handle(db, job):
             and doc.status == "QUARANTINED"
         ):
             try:
-                process_document(LocalStorage(), doc)
+                process_document(get_storage(), doc)
             except ValueError:
                 doc.status = "REJECTED"
             notify(

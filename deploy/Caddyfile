@@ -1,0 +1,10 @@
+orqelis.pro {
+    encode zstd gzip
+    request_body {
+        max_size 11MB
+    }
+    reverse_proxy web:8000
+}
+www.orqelis.pro {
+    redir https://orqelis.pro{uri} permanent
+}

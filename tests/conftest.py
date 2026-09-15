@@ -1,4 +1,12 @@
 import json
+import os
+
+# Unit tests must never inherit a real Supabase connection from the owner's .env.
+os.environ["DATABASE_URL"] = "sqlite:///./var/test-bootstrap.db"
+os.environ["ENVIRONMENT"] = "test"
+os.environ["AUTH_PROVIDER"] = "local"
+os.environ["STORAGE_PROVIDER"] = "local"
+os.environ["TED_ENABLED"] = "false"
 
 import pytest
 from fastapi.testclient import TestClient

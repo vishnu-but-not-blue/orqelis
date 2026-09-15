@@ -171,8 +171,8 @@ def analyze(notice, profile, evidence, at=None, lot_id=None):
     if notice.get("country") and notice["country"] not in countries:
         friction.append(
             {
-                    "reason": "Buyer country is outside declared operating countries. Confirm the place of performance.",
-                    "source": "buyer_country",
+                "reason": "Buyer country is outside declared operating countries. Confirm the place of performance.",
+                "source": "buyer_country",
                 "kind": "GEOGRAPHY",
             }
         )

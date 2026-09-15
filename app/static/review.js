@@ -12,6 +12,7 @@ document.addEventListener('click', async event => {
   } catch (error) { toast(error.message); }
 });
 const reviewObserver = new MutationObserver(() => {
+  if (document.body.dataset.documentProcessing === 'false') return;
   if (!location.pathname.startsWith('/opportunities/') || $('#review-dossier')) return;
   const row = $('.button-row', main);
   if (row) { const button = document.createElement('button'); button.className='secondary'; button.id='review-dossier'; button.textContent='Review tender dossier'; row.append(button); }

@@ -1,0 +1,37 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "orqelis",
+  "account_id": "285f2786e19932f56b31d6bb75d37a39",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-09-15",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "vars": {
+    "RELEASE_MODE": "restricted-preview",
+    "DOCUMENT_UPLOADS_ENABLED": "false",
+    "DOCUMENT_PROCESSING_ENABLED": "false",
+    "BILLING_PROVIDER": "disabled"
+  },
+  "triggers": {
+    "crons": [
+      "17 * * * *"
+    ]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  },
+  "hyperdrive": [
+    {
+      "binding": "DB",
+      "id": "7510cb0315184a569a275eb25f6398f6"
+    }
+  ]
+}

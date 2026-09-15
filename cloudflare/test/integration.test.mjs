@@ -1,0 +1,50 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import postgres from 'postgres';
+import {api} from '../src/api.mjs';
+import {id,token,sha} from '../src/utils.mjs';
+import {profile} from '../src/schemas.mjs';
+test('API workflows and tenant isolation on rollback-only PostgreSQL fixtures',{skip:!process.env.CF_TEST_DATABASE_URL},async()=>{
+  const sql=postgres(process.env.CF_TEST_DATABASE_URL,{max:1,prepare:false,onnotice:()=>{}}),rollback=new Error('ROLLBACK_FIXTURES');let checks=0;
+  try{await sql.begin(async tx=>{
+    const uid=id(),other=id(),oid=id(),otherOrg=id(),sessionId=id(),raw=token(),csrf=token();
+    for(const [u,o] of [[uid,oid],[other,otherOrg]]){await tx`insert into users(id,email,name,created_at) values(${u},${u+'@example.test'},'CF rollback test',now())`;await tx`insert into organizations(id,name,profile,capability_version,plan) values(${o},'CF rollback test',${tx.json(profile.parse({}))},1,'FREE')`;await tx`insert into memberships(id,organization_id,user_id,role) values(${id()},${o},${u},'OWNER')`;}
+    await tx`insert into sessions(id,token_hash,user_id,organization_id,expires_at,csrf) values(${sessionId},${await sha(raw)},${uid},${oid},now()+interval '1 hour',${csrf})`;
+    const env={RELEASE_MODE:'restricted-preview',PREVIEW_ALLOWED_EMAILS:uid+'@example.test'};
+    const request=(path,method='GET',body,headers={})=>new Request('https://example.test/api/v1'+path,{method,headers:{Cookie:'session='+raw,'X-CSRF-Token':csrf,'Content-Type':'application/json',...headers},...(body?{body:JSON.stringify(body)}:{})});
+    const call=async(path,method='GET',body,headers)=>{checks++;return (await api(request(path,method,body,headers),env,tx)).json();};
+    assert.equal((await call('/auth/me')).id,uid);
+    assert.equal((await call('/company')).id,oid);
+    await assert.rejects(call('/company','PUT',{}, {'X-CSRF-Token':'wrong'}),e=>e.status===403);
+    await assert.rejects(call('/organizations/'+otherOrg+'/switch','POST'),e=>e.status===404);
+    await call('/company','PUT',{country:'DE',operating_countries:['DE'],cpv_interests:['72000000']});
+    const declaration=await call('/evidence','POST',{capability:'Annual turnover',value:2000000,currency:'EUR'});
+    assert.equal(declaration.state,'UNVERIFIED');assert.equal((await call('/evidence'))[0].capability,'TURNOVER');
+    await assert.rejects(call('/evidence','POST',{capability:'ISO 27001',state:'USER_CONFIRMED'}),e=>e.status===422);
+    await assert.rejects(call('/documents','POST'),e=>e.status===503);
+    const foreignEvidence=id();await tx`insert into evidence(id,organization_id,capability,data,state,locator) values(${foreignEvidence},${otherOrg},'SECRET',${tx.json({})},'UNVERIFIED','test')`;
+    await assert.rejects(call('/evidence/'+foreignEvidence,'PUT',{capability:'stolen'}),e=>e.status===404);
+    await assert.rejects(call('/evidence/'+foreignEvidence,'DELETE'),e=>e.status===404);
+    const nid=id(),vid=id(),facts={source_url:'https://ted.europa.eu/en/notice/-/detail/1-2026',title:'CF test notice',country:'DE',buyer:'Test',published:'2026-09-15',deadline:'2027-09-15T12:00:00Z',requirements:[],requirements_complete:false,cpv_codes:['72000000'],completeness_score:45};
+    await tx`insert into source_notices(id,source,source_id,current_version_id,title,country,published,deadline,status,search_text) values(${nid},'DEMO',${'CF_TEST:'+nid},${vid},'CF test notice','DE','2026-09-15',${facts.deadline},'ACTIVE','cf test notice 72000000')`;
+    await tx`insert into notice_versions(id,notice_id,source_version,publication_number,content_hash,raw_payload,normalized,fetched_at,parser_version) values(${vid},${nid},'1','1-2026',${await sha(nid)},'{}',${tx.json(facts)},now(),'test')`;
+    assert.equal((await call('/opportunities/'+nid)).id,nid);
+    const assessment=await call('/opportunities/'+nid+'/analysis','POST');assert.equal(assessment.result.eligibility,'UNKNOWN');assert.equal(assessment.result.decision,'REVIEW');
+    assert.equal((await call('/opportunities/'+nid+'/analysis','POST')).id,assessment.id);
+    await call('/watchlist/'+nid,'PUT',{state:'WATCH'});assert.equal((await call('/watchlist'))[0].notice_id,nid);
+    assert.equal((await call('/opportunities?saved=true')).items.some(n=>n.id===nid),true);
+    assert.equal((await call('/exports/analyses/'+assessment.id)).analysis_id,assessment.id);
+    await tx`update sessions set organization_id=${otherOrg} where id=${sessionId}`;
+    await tx`insert into memberships(id,organization_id,user_id,role) values(${id()},${otherOrg},${uid},'VIEWER')`;
+    await assert.rejects(call('/exports/analyses/'+assessment.id),e=>e.status===404);
+    await assert.rejects(call('/evidence','POST',{capability:'blocked'}),e=>e.status===403);
+    await tx`update sessions set organization_id=${oid} where id=${sessionId}`;
+    const inv=await call('/memberships/invite','POST',{email:id()+'@example.test',role:'MEMBER'});assert.equal(inv.invitation_code.length,64);
+    assert.equal((await call('/billing')).usage.analysis,1);
+    await call('/evidence/'+declaration.id,'DELETE');assert.equal((await call('/evidence')).length,0);
+    assert.equal((await call('/opportunities/'+nid+'/analysis')).stale,true);
+    const exported=await call('/account/export');assert.equal(exported.organization.name,'CF rollback test');assert.equal(exported.evidence.length,0);
+    await call('/auth/logout','POST');await assert.rejects(call('/auth/me'),e=>e.status===401);
+    console.log(`Verified ${checks} API calls; rolling back every fixture.`);throw rollback;
+  });}catch(e){if(e!==rollback)throw e;}finally{await sql.end({timeout:5});}
+});

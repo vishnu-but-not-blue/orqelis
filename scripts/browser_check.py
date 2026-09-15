@@ -12,8 +12,11 @@ Path("var/screenshots").mkdir(parents=True, exist_ok=True)
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": 1440, "height": 1050})
+    page.set_default_timeout(20000)
+    expect.set_options(timeout=20000)
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("console", lambda m: print(f"[CONSOLE {m.type}]: {m.text}"))
     page.goto("http://127.0.0.1:8000/login")
     page.get_by_label("Your name").fill("Alex Morgan")
     page.get_by_label("Work email").fill(f"browser-{secrets.token_hex(5)}@example.test")

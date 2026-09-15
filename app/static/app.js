@@ -30,9 +30,21 @@ function sourceModal(req){modal('Source evidence',`<p class="subtle">${esc(req.s
 
 async function login(){
   document.body.classList.add('login-mode');
-  main.innerHTML=`<div class="login-layout"><section class="login-art"><a class="brand" href="/login"><img src="/static/mark.svg" width="38" height="38" alt="">Orqelis<span class="brand-dot">®</span></a><div class="login-copy"><div class="eyebrow">A BETTER WAY TO BID</div><h1>The right contract.<br>The evidence to<br><em>go after it.</em></h1><p>Turn European procurement opportunities into clear, confident decisions for your business.</p><div class="login-matrix"><div><strong>Find your fit</strong><small>Authoritative TED opportunities</small></div><div><strong>Prove your case</strong><small>Evidence-backed eligibility</small></div><div><strong>Bid with clarity</strong><small>Transparent effort and cost</small></div></div></div><small>Built for ambitious European businesses.</small></section><section class="login-form"><div><div class="eyebrow">WELCOME TO YOUR NEXT OPPORTUNITY</div><h2>Make your next bid count.</h2><p>Create your workspace or sign back in.</p><form id="login-form">${field('name','Your name','','text')}${field('email','Work email','','email')}<button type="submit" class="primary">Continue with email &nbsp; →</button></form><div id="login-code"></div><div class="notice info spacerless">Local development workspace. Sign-in uses a one-time code displayed here. Production identity is configured separately.</div><div class="login-legal">For business use. By continuing, you accept the <a href="/legal/terms">Terms</a> and acknowledge the <a href="/legal/privacy">Privacy Policy</a>.</div></div></section></div>`;
+  main.innerHTML=`<div class="login-layout"><section class="login-art"><a class="brand" href="/login"><img src="/static/mark.svg" width="38" height="38" alt="">Orqelis<span class="brand-dot">®</span></a><div class="login-copy"><div class="eyebrow">A BETTER WAY TO BID</div><h1>The right contract.<br>The evidence to<br><em>go after it.</em></h1><p>Turn European procurement opportunities into clear, confident decisions for your business.</p><div class="login-matrix"><div><strong>Find your fit</strong><small>Authoritative TED opportunities</small></div><div><strong>Prove your case</strong><small>Evidence-backed eligibility</small></div><div><strong>Bid with clarity</strong><small>Transparent effort and cost</small></div></div></div><small>Built for ambitious European businesses.</small></section><section class="login-form"><div><div class="eyebrow">WELCOME TO YOUR NEXT OPPORTUNITY</div><h2>Make your next bid count.</h2><p>Create your workspace or sign back in.</p><form id="login-form">${field('name','Your name','','text')}${field('email','Work email','','email')}<button type="submit" class="primary">Continue with email &nbsp; →</button></form><div id="login-code"></div>${document.body.dataset.authProvider==='local'?'<div class="notice info spacerless">Local development workspace. Sign-in uses a one-time code displayed here.</div>':''}<div class="login-legal">For business use. By continuing, you accept the <a href="/legal/terms">Terms</a> and acknowledge the <a href="/legal/privacy">Privacy Policy</a>.</div></div></section></div>`;
   $('#email').required=true;
-  form('#login-form',async data=>{const result=await api('/auth/request',{method:'POST',body:Object.fromEntries(data)});$('#login-code').innerHTML=`<form id="verify-form"><div class="notice info">${esc(result.message)}</div>${field('token','One-time sign-in code',result.development_code)}<button type="submit" class="primary">Open your workspace →</button></form>`;$('#login-form').hidden=true;form('#verify-form',async d=>{const verified=await api('/auth/verify',{method:'POST',body:{token:d.get('token')}});location.href=verified.organization_id?'/dashboard':'/onboarding';});});
+  form('#login-form',async data=>{
+    const email=data.get('email');
+    const result=await api('/auth/request',{method:'POST',body:Object.fromEntries(data)});
+    $('#login-code').innerHTML=`<form id="verify-form"><div class="notice info">${esc(result.message)}</div>${field('token','One-time sign-in code',result.development_code||'')}<button type="submit" class="primary">Open your workspace →</button></form>`;
+    $('#login-form').hidden=true;
+    $('#token').autocomplete='one-time-code';
+    form('#verify-form',async d=>{
+      const body={token:d.get('token')};
+      if(result.provider==='supabase')body.email=email;
+      const verified=await api('/auth/verify',{method:'POST',body});
+      location.href=verified.organization_id?'/dashboard':'/onboarding';
+    });
+  });
 }
 
 async function onboarding(){
@@ -129,6 +141,7 @@ async function settingsPage(){
 }
 
 async function boot(){
+  if (window.orqelisAuthReady) await window.orqelisAuthReady;
   on('#close-modal','click',()=>$('#modal').close());on('#mobile-menu','click',()=>$('.sidebar').classList.toggle('open'));
   if(state.page==='login'){await login();return;}
   state.me=await api('/auth/me');state.csrf=state.me.csrf;

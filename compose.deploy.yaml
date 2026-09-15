@@ -1,0 +1,57 @@
+# External Supabase deployment. Generate private var/deploy.env first.
+services:
+  migrate:
+    image: ${ORQELIS_IMAGE:-orqelis:release}
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    env_file: var/deploy.env
+    command: ["/app/.venv/bin/alembic", "upgrade", "head"]
+    restart: "no"
+  signatures:
+    image: ${ORQELIS_IMAGE:-orqelis:release}
+    command: ["freshclam", "--config-file=/app/deploy/freshclam.conf", "--daemon"]
+    volumes: ["clamav:/app/var/clamav"]
+    restart: unless-stopped
+    mem_limit: 2g
+  web:
+    image: ${ORQELIS_IMAGE:-orqelis:release}
+    env_file: var/deploy.env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    expose: ["8000"]
+    restart: unless-stopped
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readiness', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  worker:
+    image: ${ORQELIS_IMAGE:-orqelis:release}
+    env_file: var/deploy.env
+    command: ["/app/.venv/bin/python", "-m", "app.jobs"]
+    volumes: ["clamav:/app/var/clamav:ro"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      signatures:
+        condition: service_started
+    restart: unless-stopped
+    mem_limit: 2g
+  proxy:
+    image: caddy:2-alpine
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  clamav:
+  caddy_data:
+  caddy_config:

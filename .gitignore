@@ -11,3 +11,8 @@ var/
 .hypothesis/
 test-results/
 playwright-report/
+node_modules/
+.wrangler/
+.dev.vars*
+cloudflare/public/
+cloudflare/generated/

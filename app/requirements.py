@@ -119,10 +119,20 @@ def extract(text: str, locator: str, lot_id=None) -> Requirement:
             re.I,
         )
         numeric = money or trailing
-        count_match = re.search(r"(\d+)\s+(?:similar\s+|project\s+|completed\s+)*(?:references|projects)", text, re.I)
-        value = number(count_match[1] if req.unit == "count" and count_match else numeric[1] if numeric else text)
+        count_match = re.search(
+            r"(\d+)\s+(?:similar\s+|project\s+|completed\s+)*(?:references|projects)", text, re.I
+        )
+        value = number(
+            count_match[1]
+            if req.unit == "count" and count_match
+            else numeric[1]
+            if numeric
+            else text
+        )
         if req.unit == "count" and numeric:
-            req.ambiguous = True  # Project count and minimum project values need separate predicates.
+            req.ambiguous = (
+                True  # Project count and minimum project values need separate predicates.
+            )
         req.threshold = float(value) if value is not None else None
         req.comparator = "gte"
         if re.search(r"more than|greater than|exceeding", lower) and "not exceeding" not in lower:

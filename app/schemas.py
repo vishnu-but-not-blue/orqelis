@@ -17,6 +17,11 @@ class VerifyInput(Input):
     token: str = Field(min_length=20, max_length=200)
 
 
+class AuthVerifyInput(Input):
+    token: str = Field(min_length=6, max_length=8192)
+    email: str | None = Field(default=None, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
 class OrgInput(Input):
     name: str = Field(min_length=2, max_length=160)
 

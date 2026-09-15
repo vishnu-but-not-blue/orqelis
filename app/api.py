@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 
 from app.auth import (
     LocalAuthProvider,
+    SupabaseAuthProvider,
     audit,
     create_session,
     digest,
@@ -45,6 +46,7 @@ from app.models import (
 )
 from app.requirements import canonical
 from app.schemas import (
+    AuthVerifyInput,
     CorrectionInput,
     EvidenceInput,
     InviteInput,
@@ -56,7 +58,7 @@ from app.schemas import (
     WatchInput,
 )
 from app.services import evidence_dict, invalidate, plans, quota, run_analysis, scoped
-from app.storage import LocalStorage, validate_upload
+from app.storage import get_storage, validate_upload
 from app.ted import content_hash
 
 router = APIRouter(prefix="/api/v1")
@@ -64,21 +66,40 @@ router = APIRouter(prefix="/api/v1")
 
 @router.post("/auth/request")
 def login(body: LoginInput, request: Request, db=Depends(get_db)):
-    if settings().auth_provider != "local" or settings().environment == "production":
-        raise HTTPException(503, "Configure the selected production identity adapter.")
-    token = LocalAuthProvider().create_link(db, body.email, body.name or body.email.split("@")[0])
-    # Deliberately explicit local adapter. Never exposed by production configuration.
-    return {
-        "message": "Local development sign-in code. No email is sent.",
-        "development_code": token,
-    }
+    if settings().auth_provider == "local":
+        if settings().environment == "production":
+            raise HTTPException(503, "Configure the selected production identity adapter.")
+        token = LocalAuthProvider().create_link(
+            db, body.email, body.name or body.email.split("@")[0]
+        )
+        return {
+            "message": "Local development sign-in code. No email is sent.",
+            "development_code": token,
+        }
+    elif settings().auth_provider == "supabase":
+        SupabaseAuthProvider().request_code(body.email, body.name)
+        return {
+            "message": "Check your work email for your one-time sign-in code.",
+            "provider": "supabase",
+        }
+    raise HTTPException(503, "Configure the selected production identity adapter.")
 
 
 @router.post("/auth/verify")
-def verify(body: VerifyInput, response: Response, db=Depends(get_db)):
-    if settings().auth_provider != "local" or settings().environment == "production":
+def verify(body: AuthVerifyInput, response: Response, db=Depends(get_db)):
+    if settings().auth_provider == "local":
+        if settings().environment == "production":
+            raise HTTPException(503, "Production identity adapter required.")
+        user = LocalAuthProvider().identify(db, body.token)
+    elif settings().auth_provider == "supabase":
+        provider = SupabaseAuthProvider()
+        user = (
+            provider.verify_code(db, body.email, body.token)
+            if body.email
+            else provider.identify(db, body.token)
+        )
+    else:
         raise HTTPException(503, "Production identity adapter required.")
-    user = LocalAuthProvider().identify(db, body.token)
     token, session = create_session(db, user)
     response.set_cookie(
         "session",
@@ -282,6 +303,10 @@ def documents(org=Depends(tenant), db=Depends(get_db)):
 async def upload(
     file: UploadFile = File(...), org=Depends(tenant), user=Depends(principal), db=Depends(get_db)
 ):
+    if not settings().document_uploads_enabled:
+        raise HTTPException(
+            503, "Document uploads are temporarily disabled. Use manual evidence entry."
+        )
     quota(db, org, "documents")
     data = await file.read(settings().max_upload_bytes + 1)
     mime = validate_upload(data, file.filename or "document")
@@ -293,7 +318,7 @@ async def upload(
     )
     if existing:
         return {"id": existing.id, "status": existing.status, "duplicate": True}
-    storage = LocalStorage()
+    storage = get_storage()
     key = storage.put(data)
     try:
         doc = Document(
@@ -357,7 +382,7 @@ def download(
     if grant != {"id": id_, "org": org.id, "user": user.id} or doc.status != "READY":
         raise HTTPException(403, "Access denied.")
     return Response(
-        LocalStorage().get(doc.object_key),
+        get_storage().get(doc.object_key),
         media_type="application/octet-stream",
         headers={
             "Content-Disposition": 'attachment; filename="evidence-document"',
@@ -369,7 +394,7 @@ def download(
 @router.delete("/documents/{id_}")
 def delete_document(id_: str, org=Depends(tenant), user=Depends(principal), db=Depends(get_db)):
     doc = scoped(db, Document, id_, org)
-    LocalStorage().delete(doc.object_key)
+    get_storage().delete(doc.object_key)
     db.delete(doc)
     invalidate(db, org)
     # Remove historical private evidence references after source-document deletion.
@@ -485,16 +510,45 @@ def opportunities(
         )
     rows = list(db.scalars(stmt.order_by(Notice.id).limit(min(max(limit, 1), 100) + 1)))
     page_size = min(max(limit, 1), 100)
+    current_rows = rows[:page_size]
     next_cursor = rows[page_size - 1].id if len(rows) > page_size else None
-    output = []
-    for n in rows[:page_size]:
-        v = db.get(NoticeVersion, n.current_version_id)
-        a = db.scalar(
+    notice_ids = [n.id for n in current_rows]
+    version_ids = [n.current_version_id for n in current_rows if n.current_version_id]
+    versions = (
+        {
+            v.id: v
+            for v in db.scalars(select(NoticeVersion).where(NoticeVersion.id.in_(version_ids)))
+        }
+        if version_ids
+        else {}
+    )
+    analyses = {}
+    if notice_ids:
+        for a in db.scalars(
             select(Analysis)
-            .where(Analysis.notice_id == n.id, Analysis.organization_id == org.id)
+            .where(Analysis.notice_id.in_(notice_ids), Analysis.organization_id == org.id)
             .order_by(Analysis.created_at.desc())
-        )
-        w = db.scalar(select(Watch).where(Watch.notice_id == n.id, Watch.organization_id == org.id))
+        ):
+            if a.notice_id not in analyses:
+                analyses[a.notice_id] = a
+    watches = (
+        {
+            w.notice_id: w
+            for w in db.scalars(
+                select(Watch).where(
+                    Watch.notice_id.in_(notice_ids), Watch.organization_id == org.id
+                )
+            )
+        }
+        if notice_ids
+        else {}
+    )
+    output = []
+    for n in current_rows:
+        v = versions.get(n.current_version_id)
+        a = analyses.get(n.id)
+        w = watches.get(n.id)
+        v_norm = v.normalized if v else {}
         output.append(
             {
                 "id": n.id,
@@ -504,13 +558,13 @@ def opportunities(
                 "published": n.published,
                 "deadline": n.deadline,
                 "status": n.status,
-                "buyer": v.normalized.get("buyer"),
-                "value": v.normalized.get("value"),
-                "currency": v.normalized.get("currency"),
-                "cpv_codes": v.normalized.get("cpv_codes", []),
+                "buyer": v_norm.get("buyer"),
+                "value": v_norm.get("value"),
+                "currency": v_norm.get("currency"),
+                "cpv_codes": v_norm.get("cpv_codes", []),
                 "decision": a.result["decision"] if a and not a.stale else "UNASSESSED",
                 "watch": w.state if w else None,
-                "fetched_at": v.fetched_at,
+                "fetched_at": v.fetched_at if v else None,
             }
         )
     return {"items": output, "next_cursor": next_cursor}
@@ -777,7 +831,7 @@ def export_account(org=Depends(tenant), user=Depends(principal), db=Depends(get_
         for doc in db.scalars(
             select(Document).where(Document.organization_id == org.id, Document.status == "READY")
         ):
-            archive.writestr(f"documents/{doc.id}.bin", LocalStorage().get(doc.object_key))
+            archive.writestr(f"documents/{doc.id}.bin", get_storage().get(doc.object_key))
     audit(db, org, user, "account.exported")
     db.commit()
     return Response(
@@ -810,7 +864,7 @@ def delete_account(
             for doc in db.scalars(
                 select(Document).where(Document.organization_id == m.organization_id)
             ):
-                LocalStorage().delete(doc.object_key)
+                get_storage().delete(doc.object_key)
             for job in db.scalars(select(Job)):
                 if job.payload.get("organization_id") == m.organization_id:
                     db.delete(job)
@@ -854,5 +908,5 @@ def org_health(request: Request, org=Depends(tenant), db=Depends(get_db)):
             .select_from(Notification)
             .where(Notification.organization_id == org.id, Notification.delivered.is_(False))
         ),
-        "storage": LocalStorage().health(),
+        "storage": get_storage().health(),
     }

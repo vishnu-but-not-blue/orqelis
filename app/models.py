@@ -37,6 +37,7 @@ class Tenant:
 
 class User(Identity, Base):
     __tablename__ = "users"
+    auth_subject: Mapped[str | None] = mapped_column(String(160), unique=True, nullable=True)
     email: Mapped[str] = mapped_column(String(254), unique=True)
     name: Mapped[str] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
