@@ -8,5 +8,4 @@ COPY migrations ./migrations
 COPY alembic.ini ./
 RUN useradd --uid 10001 --create-home appuser && mkdir -p /app/var/objects && chown -R appuser:appuser /app
 USER appuser
-EXPOSE 8000
-CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+CMD ["sh", "-c", "/app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --no-access-log"]
