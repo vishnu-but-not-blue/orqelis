@@ -51,7 +51,17 @@ app = FastAPI(
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=list(
-        {urlparse(settings().base_url).hostname, "localhost", "127.0.0.1", "testserver"}
+        {
+            urlparse(settings().base_url).hostname,
+            "orqelis.pro",
+            "*.orqelis.pro",
+            "orqelis.onrender.com",
+            "*.onrender.com",
+            "localhost",
+            "127.0.0.1",
+            "testserver",
+        }
+        - {None}
     ),
 )
 app.include_router(router)
@@ -71,7 +81,12 @@ async def guard(request: Request, call_next):
     response = None
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
         origin = request.headers.get("origin")
-        if origin and origin.rstrip("/") != settings().base_url.rstrip("/"):
+        allowed_origins = {
+            settings().base_url.rstrip("/"),
+            "https://orqelis.pro",
+            "https://orqelis.onrender.com",
+        }
+        if origin and origin.rstrip("/") not in allowed_origins:
             response = JSONResponse(
                 {"error": {"code": "origin_denied", "message": "Untrusted request origin."}}, 403
             )
