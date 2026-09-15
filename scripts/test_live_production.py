@@ -1,5 +1,7 @@
 import sys
+
 import httpx
+
 sys.stdout.reconfigure(encoding='utf-8')
 
 base_url = "https://orqelis.pro"

@@ -155,3 +155,55 @@ def test_hosted_login_never_exposes_development_code(client, monkeypatch):
         ).status_code
         == 200
     )
+
+
+def test_otp_redirect_is_canonical_even_with_internal_base_url(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings(), "base_url", "https://orqelis.onrender.com")
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs)
+        return httpx.Response(200, json={})
+
+    monkeypatch.setattr(httpx, "post", post)
+    provider().request_code("pilot@example.test", "Pilot")
+    assert calls[0]["params"] == {"redirect_to": "https://orqelis.pro/login"}
+    assert calls[0]["json"]["create_user"] is True
+
+
+def test_production_otp_session_flags_csrf_and_logout_replay(client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings(), "environment", "production")
+    monkeypatch.setattr(settings(), "auth_provider", "supabase")
+    monkeypatch.setattr(
+        httpx, "post", lambda *a, **kw: httpx.Response(200, json={"access_token": "verified"})
+    )
+    monkeypatch.setattr(httpx, "get", lambda *a, **kw: httpx.Response(200, json=identity()))
+    result = client.post(
+        "/api/v1/auth/verify", json={"email": "pilot@example.test", "token": "12345678"}
+    )
+    assert result.status_code == 200
+    cookie = result.headers["set-cookie"]
+    assert "HttpOnly" in cookie and "Secure" in cookie and "SameSite=strict" in cookie
+    token = cookie.split(";", 1)[0]
+    assert client.post("/api/v1/auth/logout", headers={"Cookie": token}).status_code == 403
+    assert (
+        client.post(
+            "/api/v1/auth/logout", headers={"Cookie": token, "X-CSRF-Token": result.json()["csrf"]}
+        ).status_code
+        == 200
+    )
+    assert client.get("/api/v1/auth/me", headers={"Cookie": token}).status_code == 401
+
+
+def test_otp_template_contains_code_and_only_canonical_destination():
+    from pathlib import Path
+
+    template = Path("deploy/supabase-email-otp.html").read_text(encoding="utf8")
+    assert "{{ .Token }}" in template
+    assert "{{ .ConfirmationURL }}" not in template
+    assert "https://orqelis.pro/login" in template
+    assert not any(value in template for value in ["localhost", "127.0.0.1", "onrender.com"])

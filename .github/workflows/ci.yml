@@ -38,3 +38,21 @@ jobs:
 
       - name: Run automated test suite
         run: uv run pytest --cov=app --cov-report=term-missing
+
+      - name: Set up Node for localization regression tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check browser scripts and localization security
+        run: |
+          node --check app/static/app.js
+          node --check app/static/review.js
+          node --check app/static/i18n.js
+          node --test tests/i18n.test.cjs
+
+      - name: Install test browser
+        run: uv run playwright install --with-deps chromium
+
+      - name: Verify all languages in a real browser with isolated data
+        run: uv run python -m scripts.check_i18n_browser

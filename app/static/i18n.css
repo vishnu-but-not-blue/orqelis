@@ -1,0 +1,9 @@
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.language-control{margin-left:auto;flex-shrink:0}
+.language-control select{font:inherit;font-size:12px;width:auto;max-width:140px;min-height:36px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--green);padding:5px 24px 5px 9px}
+.language-control select:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+.login-mode .topbar{display:flex;position:absolute;right:0;top:0;background:transparent;border:0;width:auto;z-index:5;padding:15px 25px}
+.login-mode .topbar>*:not(.language-control){display:none}
+.login-mode .login-form{padding-top:75px}
+@media(max-width:680px){.topbar #breadcrumb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.language-control select{max-width:115px}.login-mode .topbar{padding:12px 15px}}
+@media print{.language-control{display:none}}

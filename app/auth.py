@@ -62,9 +62,7 @@ class LocalAuthProvider:
 
 
 class SupabaseAuthProvider:
-    """Production identity adapter for Supabase Auth (Phase 10 boundary).
-    Validates Supabase JWTs (via HS256 secret or Supabase /auth/v1/user endpoint).
-    """
+    """Exchange email OTPs and verify identity with Supabase's authoritative endpoint."""
 
     def __init__(
         self,
@@ -80,6 +78,9 @@ class SupabaseAuthProvider:
         try:
             response = httpx.post(
                 f"{self.supabase_url}/auth/v1/otp",
+                # Defence in depth if an operator later enables link-based templates.
+                # Never derive an auth destination from Host/Origin or a Render hostname.
+                params={"redirect_to": "https://orqelis.pro/login"},
                 headers={"apikey": self.anon_key},
                 json={"email": email, "create_user": True, "data": {"full_name": name}},
                 timeout=15,
