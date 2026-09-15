@@ -108,6 +108,16 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")
 rate_windows = defaultdict(deque)
 
 
+def get_client_ip(request: Request) -> str:
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip:
+        return cf_ip.strip()
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @app.middleware("http")
 async def guard(request: Request, call_next):
     started = time.monotonic()
@@ -140,8 +150,9 @@ async def guard(request: Request, call_next):
                 {"error": {"code": "invalid_length", "message": "Invalid content length."}}, 400
             )
     if path.startswith("/api/v1/auth/"):
-        key = request.client.host if request.client else "unknown"
+        key = get_client_ip(request)
         window = rate_windows[key]
+
         while window and window[0] < started - 60:
             window.popleft()
         if len(window) >= 20:
