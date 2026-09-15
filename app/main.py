@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import secrets
@@ -20,6 +21,7 @@ from app.api import router
 from app.config import settings
 from app.db import SessionLocal, initialize_database
 from app.ingest import register_sources
+from app.jobs import run_once, schedule
 from app.observability import metrics
 from app.observability import router as diagnostics_router
 from app.reviews import router as reviews_router
@@ -38,7 +40,41 @@ async def lifespan(app):
     with SessionLocal() as db:
         register_sources(db)
     app.state.signing_key = config.secret_key or secrets.token_urlsafe(48)
-    yield
+
+    worker_task = None
+    if config.environment != "test" and getattr(config, "worker_enabled", True):
+
+        async def _worker_loop():
+            log.info("In-process background worker started.")
+            while True:
+                try:
+                    with SessionLocal() as db:
+                        schedule(db)
+                    had_work = True
+                    while had_work:
+                        had_work = await asyncio.to_thread(run_once, SessionLocal)
+                except asyncio.CancelledError:
+                    break
+                except Exception as exc:
+                    log.error("Worker background task error: %s", exc)
+                try:
+                    await asyncio.sleep(5)
+                except asyncio.CancelledError:
+                    break
+            log.info("In-process background worker stopped.")
+
+        worker_task = asyncio.create_task(_worker_loop())
+
+    try:
+        yield
+    finally:
+        if worker_task:
+            worker_task.cancel()
+            try:
+                await worker_task
+            except asyncio.CancelledError:
+                pass
+
 
 
 app = FastAPI(

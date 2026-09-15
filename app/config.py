@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     supabase_region: str = ""
     supabase_storage_bucket: str = "documents"
     plans_json: str = '{"FREE":{"analyses":20,"documents":20,"members":3},"SME":{"analyses":300,"documents":200,"members":10},"PRO":{"analyses":1000,"documents":1000,"members":30},"ADVISOR":{"analyses":2000,"documents":2000,"members":50}}'
+    worker_enabled: bool = True
+
 
     def validate_deployment(self):
         if self.auth_provider not in {"local", "supabase"} or self.storage_provider not in {
