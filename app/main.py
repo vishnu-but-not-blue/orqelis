@@ -206,7 +206,8 @@ async def guard(request: Request, call_next):
             "Content-Security-Policy": (
                 "default-src 'self'; script-src 'self' 'nonce-" + request.state.csp_nonce + "' "
                 "https://www.googletagmanager.com; style-src 'self'; "
-                "img-src 'self' data: https://www.google-analytics.com; "
+                "img-src 'self' data: https://www.google-analytics.com "
+                "https://www.googletagmanager.com/td; "
                 "connect-src 'self' https://www.google-analytics.com "
                 "https://region1.google-analytics.com https://analytics.google.com; "
                 "frame-ancestors 'none'; form-action 'self'; base-uri 'none'; object-src 'none'"

@@ -29,7 +29,11 @@ window.OrqelisAnalytics = (() => {
     // No arguments from callers are accepted. Never read titles, input values, API bodies,
     // query strings, hashes, document IDs, user IDs, or arbitrary data attributes.
     if(name==='page_view' && !publicPaths.has(location.pathname))return;
-    gtag('event',name,{page_location:'https://orqelis.pro'+safePath(),page_title:publicPaths.has(location.pathname)?'Orqelis public information':'Orqelis workspace',page_referrer:'',language:language(),send_to:measurementId});
+    return new Promise(resolve=>{
+      const done=()=>{clearTimeout(timer);resolve();};
+      const timer=setTimeout(resolve,1500);
+      gtag('event',name,{page_location:'https://orqelis.pro'+safePath(),page_title:publicPaths.has(location.pathname)?'Orqelis public information':'Orqelis workspace',page_referrer:'',language:language(),send_to:measurementId,event_callback:done,event_timeout:1200});
+    });
   }
   function start() {
     if(!enabled() || loaded)return;
