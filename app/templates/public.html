@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="{{ language }}"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ title }}</title><meta name="description" content="{{ description }}">
+<meta name="robots" content="index,follow"><link rel="canonical" href="{{ canonical }}">
+{% if not guide %}{% for code in languages %}<link rel="alternate" hreflang="{{ code }}" href="https://orqelis.pro{{ language_path(code) }}">{% endfor %}<link rel="alternate" hreflang="x-default" href="https://orqelis.pro/">{% endif %}
+<meta property="og:type" content="website"><meta property="og:site_name" content="Orqelis"><meta property="og:title" content="{{ title }}"><meta property="og:description" content="{{ description }}"><meta property="og:url" content="{{ canonical }}"><meta property="og:image" content="https://orqelis.pro/static/social.png"><meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#174e3c"><link rel="icon" href="{{ assets }}/mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="{{ assets }}/public.css"><link rel="stylesheet" href="{{ assets }}/analytics.css">
+<script type="application/ld+json" nonce="{{ request.state.csp_nonce }}">{{ schema|tojson }}</script>
+<script src="{{ assets }}/public.js" defer></script><script src="{{ assets }}/analytics.js" defer></script>
+</head><body data-public="true" data-public-language="{{ language if not guide else '' }}" data-analytics-page="{{ analytics_page }}">
+<a class="skip" href="#main">{{ copy.how }}</a>
+<header><a class="brand" href="{{ language_path(language) }}"><img src="{{ assets }}/mark.svg" width="34" height="34" alt="">Orqelis</a><nav aria-label="{{ copy.how }}"><a href="{{ language_path(language) }}#how">{{ copy.how }}</a><a class="button" href="/login">{{ copy.cta }}</a></nav>
+<details class="languages"><summary>{{ copy.language }} · {{ language|upper }}</summary><nav>{% for code, name in languages.items() %}<a href="{{ language_path(code) }}" lang="{{ code }}" hreflang="{{ code }}" data-language="{{ code }}" {% if code == language %}aria-current="page"{% endif %}>{{ name }}</a>{% endfor %}</nav></details></header>
+<main id="main">
+<section class="hero"><p class="eyebrow">{{ copy.eyebrow }}</p><h1>{{ heading }}</h1><p class="intro">{{ intro }}</p><a class="button" href="/login">{{ copy.cta }}</a></section>
+{% if guide %}<article class="article">{% for heading, body in guide.sections %}<section><h2>{{ heading }}</h2><p>{{ body }}</p></section>{% endfor %}<h2>Further reading and official sources</h2><ul>{% for label, url in guide.links %}<li><a href="{{ url }}">{{ label }}</a></li>{% endfor %}</ul></article>
+{% else %}<div class="features">{% for heading, body in copy.sections %}<section><span class="number">0{{ loop.index }}</span><h2>{{ heading }}</h2><p>{{ body }}</p></section>{% endfor %}</div>
+<section id="how" class="workflow"><h2>{{ copy.workflow }}</h2><ol>{% for step in copy.steps %}<li>{{ step }}</li>{% endfor %}</ol></section>
+<section class="faq"><h2>{{ copy.questions }}</h2>{% for question, answer in copy.faq %}<details><summary>{{ question }}</summary><p>{{ answer }}</p></details>{% endfor %}</section>{% endif %}
+<section class="guides"><h2>{{ copy.guides }}</h2><ul>{% for slug, item in guides.items() %}<li><a href="/guides/{{ slug }}" lang="en">{{ item.heading }}</a></li>{% endfor %}</ul></section>
+<section class="closing"><h2>{{ copy.note }}</h2><a class="button" href="/login">{{ copy.cta }}</a></section>
+</main><footer><span>Orqelis</span><a href="/legal/sources">{{ copy.sources }}</a><a href="/legal/privacy">{{ copy.privacy }}</a><a href="/legal/terms">{{ copy.terms }}</a><button type="button" data-analytics-settings>Analytics preferences</button></footer>
+</body></html>

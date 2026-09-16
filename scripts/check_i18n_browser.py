@@ -57,6 +57,7 @@ def main():
             page.on("pageerror", lambda error: errors.append(str(error)))
             base = "http://127.0.0.1:8019"
             page.goto(base + "/login")
+            page.locator("[data-analytics-deny]").click()
             expect(page.locator("#language option")).to_have_count(8)
             page.select_option("#language", "de")
             expect(page.locator("html")).to_have_attribute("lang", "de")

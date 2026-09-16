@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
@@ -25,6 +25,15 @@ from app.ingest import register_sources
 from app.jobs import run_once, schedule
 from app.observability import metrics
 from app.observability import router as diagnostics_router
+from app.public import (
+    CONTENT,
+    GUIDES,
+    LANGUAGES,
+    ORIGIN,
+    indexable_paths,
+    language_path,
+    structured_data,
+)
 from app.reviews import router as reviews_router
 from app.security import BodyLimitMiddleware
 
@@ -133,8 +142,13 @@ async def guard(request: Request, call_next):
     started = time.monotonic()
     request_id = secrets.token_hex(12)
     request.state.request_id = request_id
+    request.state.csp_nonce = secrets.token_urlsafe(24)
     path = request.url.path
     response = None
+    if request.method in {"GET", "HEAD"} and request.url.hostname == "www.orqelis.pro":
+        response = RedirectResponse(ORIGIN + request.url.path + (
+            "?" + request.url.query if request.url.query else ""
+        ), status_code=308)
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
         origin = request.headers.get("origin")
         allowed_origins = {
@@ -189,10 +203,21 @@ async def guard(request: Request, call_next):
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "no-referrer",
             "X-Frame-Options": "DENY",
-            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'; object-src 'none'",
+            "Content-Security-Policy": (
+                "default-src 'self'; script-src 'self' 'nonce-" + request.state.csp_nonce + "' "
+                "https://www.googletagmanager.com; style-src 'self'; "
+                "img-src 'self' data: https://www.google-analytics.com; "
+                "connect-src 'self' https://www.google-analytics.com "
+                "https://region1.google-analytics.com https://analytics.google.com; "
+                "frame-ancestors 'none'; form-action 'self'; base-uri 'none'; object-src 'none'"
+            ),
             "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
         }
     )
+    if path not in indexable_paths() or response.status_code != 200:
+        response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    elif request.url.query or request.url.hostname not in {"orqelis.pro", "testserver"}:
+        response.headers["X-Robots-Tag"] = "noindex, follow"
     metrics[f"http_{response.status_code // 100}xx"] += 1
     metrics["requests"] += 1
     if not path.startswith("/static"):
@@ -217,6 +242,10 @@ async def guard(request: Request, call_next):
 
 @app.exception_handler(HTTPException)
 async def http_error(request, exc):
+    if exc.status_code == 404 and "text/html" in request.headers.get("accept", ""):
+        return templates.TemplateResponse(
+            request, "not_found.html", {"assets": asset_base}, status_code=404
+        )
     return JSONResponse(
         {
             "error": {
@@ -275,9 +304,61 @@ def readiness():
     return {"status": "ready"}
 
 
-@app.get("/", response_class=HTMLResponse)
+def public_response(request, language="en", slug=None):
+    copy = CONTENT[language]
+    guide = GUIDES.get(slug) if slug else None
+    path = "/guides/" + slug if slug else language_path(language)
+    title = guide["title"] if guide else copy["title"]
+    description = guide["description"] if guide else copy["description"]
+    return templates.TemplateResponse(request, "public.html", {
+        "language": language, "copy": copy, "guide": guide, "guides": GUIDES,
+        "languages": LANGUAGES, "language_path": language_path, "assets": asset_base,
+        "title": title, "description": description, "canonical": ORIGIN + path,
+        "heading": guide["heading"] if guide else copy["heading"],
+        "intro": guide["intro"] if guide else copy["intro"],
+        "schema": structured_data(language, path, title, description),
+        "analytics_page": path,
+    })
+
+
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 def home(request: Request):
-    return RedirectResponse("/dashboard" if request.cookies.get("session") else "/login")
+    return public_response(request)
+
+
+@app.api_route("/robots.txt", methods=["GET", "HEAD"])
+def robots():
+    # Let crawlers fetch private shells and see noindex. Robots blocking alone can
+    # leave URL-only results indexed. APIs/data remain authenticated independently.
+    return Response("User-agent: *\nAllow: /\nSitemap: https://orqelis.pro/sitemap.xml\n",
+                    media_type="text/plain")
+
+
+@app.api_route("/sitemap.xml", methods=["GET", "HEAD"])
+def sitemap():
+    from xml.etree.ElementTree import Element, SubElement, tostring
+
+    root = Element("urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
+    for path in sorted(indexable_paths()):
+        SubElement(SubElement(root, "url"), "loc").text = ORIGIN + path
+    return Response(tostring(root, encoding="utf-8", xml_declaration=True),
+                    media_type="application/xml")
+
+
+@app.api_route("/guides/{slug}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+def guide_page(request: Request, slug: str):
+    if slug not in GUIDES:
+        raise HTTPException(404, "Page not found")
+    return public_response(request, slug=slug)
+
+
+@app.api_route("/{language}/", methods=["GET", "HEAD"], response_class=HTMLResponse)
+def translated_home(request: Request, language: str):
+    if language not in LANGUAGES:
+        raise HTTPException(404, "Page not found")
+    if language == "en":
+        return RedirectResponse("/", status_code=308)
+    return public_response(request, language)
 
 
 @app.get("/legal/{page}", response_class=HTMLResponse)
@@ -291,6 +372,8 @@ def legal(request: Request, page: str):
 
 @app.get("/{page:path}", response_class=HTMLResponse)
 def ui(request: Request, page: str):
+    if page in LANGUAGES:
+        return RedirectResponse(language_path(page), status_code=308)
     if page not in {
         "login",
         "onboarding",

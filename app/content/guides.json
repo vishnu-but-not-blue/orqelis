@@ -1,0 +1,44 @@
+{
+  "find-eu-tenders": {
+    "title": "How to find relevant EU tenders on TED | Orqelis",
+    "heading": "How to find relevant European public tenders",
+    "description": "A practical approach to TED tender discovery: define your scope, filter notices, check deadlines and sources, and build a shortlist your team can assess.",
+    "intro": "Finding a notice is only the beginning. A useful shortlist should reflect what your company can deliver, where it can work and whether there is enough time to prepare a credible response.",
+    "sections": [
+      ["Start with the service you actually deliver", "Write down the services or products you can supply today, your delivery countries and a realistic contract range. Use CPV classifications alongside ordinary keywords: buyers may describe similar work differently, and a broad CPV group can include contracts outside your capabilities. Review the scope rather than relying on a matching keyword."],
+      ["Use TED as an official source, with clear coverage limits", "Tenders Electronic Daily publishes European public procurement notices. It is a useful starting point for cross-border discovery, but it does not contain every public contract. National portals and the buyer's own platform may carry additional opportunities or the documents required for submission. Orqelis draws on TED notices; it does not claim exhaustive national coverage."],
+      ["Read the notice before adding it to a shortlist", "Check the notice type, buyer, lots, place of performance, deadline and links to procurement documents. An award notice is not an invitation to submit a new bid. A corrigendum can change a deadline or requirement. Follow the official source and inspect the latest available version before planning work."],
+      ["Turn a search result into a qualification question", "Ask: does the contract concern work we perform, can we deliver in that location, can we meet the dates, and which requirements still need evidence? Orqelis lets teams review opportunities alongside company information and evidence. Missing information should remain an open question, not become an assumed pass."],
+      ["Keep the shortlist small enough to review", "Assign a reviewer and a next action to each promising opportunity. Separate potentially relevant work from work already checked against the documents. A disciplined shortlist reduces time spent preparing responses for contracts that cannot pass mandatory requirements."]
+    ],
+    "links": [["Search TED notices", "https://ted.europa.eu/en/"], ["Orqelis source policy", "/legal/sources"]]
+  },
+  "bid-no-bid-decisions": {
+    "title": "Evidence-backed bid/no-bid decisions for EU tenders | Orqelis",
+    "heading": "A practical bid/no-bid review for public tenders",
+    "description": "Separate mandatory eligibility, evidence gaps, commercial fit and bid effort. Build a traceable decision before committing your team to a tender response.",
+    "intro": "A large contract value is not enough reason to bid. A useful review separates what is mandatory, what is unknown and what makes the opportunity worthwhile for your company.",
+    "sections": [
+      ["Check mandatory requirements first", "Read exclusion grounds, selection criteria and submission requirements in the original procurement documents. Confirm which requirements apply to each lot, and whether consortium or subcontractor capabilities may be relied upon under those documents. Do not treat a high commercial-fit score as a substitute for a mandatory requirement."],
+      ["Distinguish a claim from supporting evidence", "For each material requirement, record the source reference, the company's position and the document supporting it. Check dates, scope and whether a document actually covers the entity submitting the offer. Orqelis separates self-declared profile information from confirmed evidence and flags information needing review."],
+      ["Estimate the cost of preparing a credible bid", "Estimate staff hours, loaded hourly costs, known external costs and the time available before the deadline. Review assumptions with the people who will do the work. These are planning estimates, not predictions of the final cost, a calibrated win probability or a promise of return on investment."],
+      ["Record a decision and the conditions behind it", "A bid/no-bid review should identify unresolved questions, a responsible reviewer and what would change the decision. For example, a team may need clarification about an accepted certificate before committing. Orqelis offers advisory assessments with source references; the team's final decision and the contracting authority's eligibility determination remain distinct."],
+      ["Revisit the decision when facts change", "A revised notice, newly confirmed evidence or a change in team availability can alter the review. Check source versions and current assumptions before submission. Keep the reasoning traceable so later reviewers can understand what was known when the decision was made."]
+    ],
+    "links": [["EU guidance on public tendering", "https://europa.eu/youreurope/business/selling-in-eu/public-contracts/public-tendering-rules/index_en.htm"], ["Sources, evidence and uncertainty", "/legal/sources"]]
+  },
+  "cross-border-tender-qualification": {
+    "title": "Cross-border European tender qualification checklist | Orqelis",
+    "heading": "Review a cross-border tender before you commit",
+    "description": "Check submission language, delivery, evidence, partners and deadlines when assessing public procurement opportunities in another European country.",
+    "intro": "A tender in another country may be relevant to your services while introducing requirements your domestic process does not cover. Use the original documents to identify those differences early.",
+    "sections": [
+      ["Check language and submission channels", "Confirm the languages accepted for the offer and supporting documents, whether certified translations are requested, and the platform used for submission. An interface translation does not change the buyer's rules. Orqelis's eight-language interface does not turn translated procurement material into authoritative evidence."],
+      ["Check delivery obligations, not just the buyer's address", "Read the place of performance, response times, on-site requirements, contract period and service obligations. Consider whether your company can resource that delivery model. A geographically nearby buyer may still require a local presence or a delivery arrangement that needs further review."],
+      ["Identify documentary requirements and unanswered questions", "List the requested registrations, references, insurance and qualifications. Read the tender's rules on accepted equivalents and how evidence must be submitted. Seek clarification through the official channel where necessary. This checklist supports preparation; it does not provide a legal determination of eligibility."],
+      ["Assess partners and timetable realistically", "If a partner is needed, confirm the tender's conditions on joint bids and subcontracting before assuming a partner resolves a gap. Allow time for document collection, internal approval and portal registration as well as drafting the response. Check the stated time zone and the latest published deadline."],
+      ["Keep the official source visible", "Record the notice and document references used in the review. In Orqelis, source facts, company claims and advisory outputs are distinct. Where evidence is missing, leave the uncertainty visible and decide which questions must be resolved before a bid can proceed."]
+    ],
+    "links": [["EU public contract guidance", "https://europa.eu/youreurope/business/selling-in-eu/public-contracts/index_en.htm"], ["Official TED portal", "https://ted.europa.eu/en/"]]
+  }
+}

@@ -136,6 +136,7 @@ class SupabaseAuthProvider:
         email = data["email"].lower().strip()
         subject = "supabase:" + data["id"]
         user = db.scalar(select(User).where(User.auth_subject == subject))
+        self.account_created = False
         if not user:
             existing = db.scalar(select(User).where(User.email == email))
             if existing and existing.auth_subject not in (None, subject):
@@ -144,6 +145,7 @@ class SupabaseAuthProvider:
                 email=email,
                 name=(data.get("user_metadata") or {}).get("full_name") or email.split("@")[0],
             )
+            self.account_created = existing is None
             user.auth_subject = subject
             db.add(user)
             db.flush()

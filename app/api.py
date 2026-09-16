@@ -109,7 +109,13 @@ def verify(body: AuthVerifyInput, response: Response, db=Depends(get_db)):
         samesite="strict",
         max_age=settings().session_hours * 3600,
     )
-    return {"csrf": session.csrf, "organization_id": session.organization_id}
+    return {
+        "csrf": session.csrf,
+        "organization_id": session.organization_id,
+        "account_created": bool(
+            settings().auth_provider == "supabase" and getattr(provider, "account_created", False)
+        ),
+    }
 
 
 @router.post("/auth/logout")

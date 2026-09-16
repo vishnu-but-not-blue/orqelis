@@ -49,6 +49,8 @@ jobs:
           node --check app/static/app.js
           node --check app/static/review.js
           node --check app/static/i18n.js
+          node --check app/static/analytics.js
+          node --check app/static/public.js
           node --test tests/i18n.test.cjs
 
       - name: Install test browser
@@ -56,3 +58,6 @@ jobs:
 
       - name: Verify all languages in a real browser with isolated data
         run: uv run python -m scripts.check_i18n_browser
+
+      - name: Verify public SEO and analytics consent/privacy
+        run: uv run python -m scripts.check_seo_browser
