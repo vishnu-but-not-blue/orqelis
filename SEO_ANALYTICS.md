@@ -28,6 +28,8 @@ Only fixed event names and fixed page categories can reach the tag. Public URLs 
 
 `decision_complete` measures a completed advisory result, not a human approval, submitted offer or award. Conditional/unknown results do not fire it. Google's standard consented session/engagement events may also appear. No synthetic customer conversions should be generated just to populate a report.
 
+Login, signup and onboarding completion carry only an allowlisted event name and timestamp in same-tab session storage, then emit once on the destination page. This avoids losing buffered Google events during immediate navigation. Pending events expire after two minutes, are consumed once, and are discarded when analytics is denied or withdrawn. No identity or form data is stored in this handoff.
+
 ## Indexing and language architecture
 
 The homepage now renders public HTML independent of login state. `/` is English; `/de/`, `/fr/`, `/es/`, `/it/`, `/nl/`, `/pl/`, `/pt/` are complete server-rendered translations with reciprocal hreflang and x-default. Public language links synchronize the existing application preference. They do not translate procurement evidence. The three guides are explicitly English and have no invented translation alternates.

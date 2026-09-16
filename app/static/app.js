@@ -46,7 +46,7 @@ async function login(){
       const body={token:d.get('token')};
       if(result.provider==='supabase')body.email=email;
       const verified=await api('/auth/verify',{method:'POST',body});
-      await window.OrqelisAnalytics?.event(verified.account_created?'sign_up':'login');
+      await window.OrqelisAnalytics?.navigationEvent(verified.account_created?'sign_up':'login');
       location.href=verified.organization_id?'/dashboard':'/onboarding';
     });
   });
@@ -61,7 +61,7 @@ async function onboarding(){
     form('#onboard-form',async d=>{const values=Object.fromEntries(d);if(step===1){orgName=values.name;if(!state.me.organization_id){const o=await api('/organizations',{method:'POST',body:{name:orgName}});state.me.organization_id=o.id;const c=await api('/company');profile=c.profile;}delete values.name;}
       for(const key of ['cpv_interests','operating_countries','languages'])if(key in values)values[key]=values[key].split(',').map(s=>s.trim()).filter(Boolean);
       for(const key of ['min_contract','max_contract','hourly_cost','bid_hours_per_day'])if(key in values)values[key]=Number(values[key]);
-      profile={...profile,...values};if(step<5){await api('/company',{method:'PUT',body:profile});step++;render();}else {await window.OrqelisAnalytics?.event('onboarding_complete');location.href='/opportunities';}
+      profile={...profile,...values};if(step<5){await api('/company',{method:'PUT',body:profile});step++;render();}else {await window.OrqelisAnalytics?.navigationEvent('onboarding_complete');location.href='/opportunities';}
     });
   };render();
 }

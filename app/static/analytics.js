@@ -4,6 +4,8 @@
 window.OrqelisAnalytics = (() => {
   const measurementId = 'G-GHGKC163XE';
   const consentKey = 'orqelis.analytics-consent.v1';
+  const pendingKey = 'orqelis.analytics-navigation.v1';
+  const navigationEvents = new Set(['login','sign_up','onboarding_complete']);
   const allowedEvents = new Set(['page_view','auth_start','login','sign_up','onboarding_complete','opportunity_view','assessment_start','assessment_complete','decision_complete']);
   const publicPaths = new Set(['/','/de/','/fr/','/es/','/it/','/nl/','/pl/','/pt/','/guides/find-eu-tenders','/guides/bid-no-bid-decisions','/guides/cross-border-tender-qualification','/legal/sources']);
   const languageCodes = ['en','de','fr','es','it','nl','pl','pt'];
@@ -24,6 +26,13 @@ window.OrqelisAnalytics = (() => {
   const enabled = () => consent==='granted' && !navigator.globalPrivacyControl && navigator.doNotTrack!=='1' && location.hostname==='orqelis.pro' && location.protocol==='https:' && /^G-[A-Z0-9]+$/.test(measurementId);
   const safePath = () => publicPaths.has(location.pathname) ? location.pathname : '/app';
   function gtag(){window.dataLayer.push(arguments);}
+  function navigationEvent(name) {
+    if(!enabled() || !navigationEvents.has(name))return;
+    // Carry only a fixed event name across a same-tab redirect. No account data.
+    // Sending on the destination avoids losing Google's buffered hit on unload.
+    try {sessionStorage.setItem(pendingKey,JSON.stringify({name,at:Date.now()}));}
+    catch {return event(name);}
+  }
   function event(name) {
     if(!enabled() || !loaded || !allowedEvents.has(name))return;
     // No arguments from callers are accepted. Never read titles, input values, API bodies,
@@ -45,12 +54,18 @@ window.OrqelisAnalytics = (() => {
     gtag('config',measurementId,{send_page_view:false,allow_google_signals:false,allow_ad_personalization_signals:false,ignore_referrer:!referrer,page_location:'https://orqelis.pro'+safePath(),page_title:publicPaths.has(location.pathname)?'Orqelis public information':'Orqelis workspace',page_referrer:referrer,cookie_domain:'orqelis.pro',cookie_expires:15552000,cookie_update:false,cookie_flags:'SameSite=Strict;Secure'});
     const script=document.createElement('script');script.async=true;script.src='https://www.googletagmanager.com/gtag/js?id='+measurementId;document.head.append(script);
     event('page_view');
+    try {
+      const pending=JSON.parse(sessionStorage.getItem(pendingKey));
+      sessionStorage.removeItem(pendingKey);
+      if(pending && navigationEvents.has(pending.name) && Number.isFinite(pending.at) && Date.now()-pending.at>=0 && Date.now()-pending.at<120000)event(pending.name);
+    } catch {}
   }
   function choose(value) {
     consent=value;try {localStorage.setItem(consentKey,JSON.stringify({value,at:Date.now()}));} catch {}
     panel.hidden=true;
     if(value==='granted')start();
     else {
+      try {sessionStorage.removeItem(pendingKey);} catch {}
       window['ga-disable-'+measurementId]=true;
       for(const cookie of document.cookie.split(';')) {
         const name=cookie.split('=')[0].trim();if(!/^_ga(?:_|$)/.test(name))continue;
@@ -67,5 +82,6 @@ window.OrqelisAnalytics = (() => {
   if(!settings){settings=document.createElement('button');settings.type='button';settings.className='analytics-settings';document.body.append(settings);}
   settings.textContent=copy[language()][0];settings.addEventListener('click',()=>{panel.hidden=false;allow.focus();});
   start();
-  return Object.freeze({event});
+  if(!enabled())try {sessionStorage.removeItem(pendingKey);} catch {}
+  return Object.freeze({event,navigationEvent});
 })();

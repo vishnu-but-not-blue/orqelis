@@ -79,12 +79,34 @@ def main():
             encoded = json.dumps(data, default=str)
             assert "private-auth-token" not in encoded
             assert 'https://orqelis.pro/app' in encoded
+            # Navigation events are delivered once on the destination, without
+            # depending on Google's buffer flushing before the old page unloads.
+            for name in ['login', 'sign_up', 'onboarding_complete']:
+                page.evaluate('(name)=>OrqelisAnalytics.navigationEvent(name)', name)
+                page.reload()
+                page.wait_for_function('window.OrqelisAnalytics')
+                events = page.evaluate("dataLayer.map(x=>Array.from(x)).filter(x=>x[0]==='event')")
+                assert [x[1] for x in events] == [name]
+                assert events[0][2]['page_location'] == 'https://orqelis.pro/app'
+                page.reload()
+                page.wait_for_function('window.OrqelisAnalytics')
+                assert page.evaluate("dataLayer.map(x=>Array.from(x)).filter(x=>x[0]==='event').length") == 0
+            page.evaluate("OrqelisAnalytics.navigationEvent('private@example.test')")
+            assert page.evaluate("sessionStorage.getItem('orqelis.analytics-navigation.v1')") is None
+            page.evaluate("sessionStorage.setItem('orqelis.analytics-navigation.v1',JSON.stringify({name:'login',at:Date.now()-180000}))")
+            page.reload()
+            page.wait_for_function('window.OrqelisAnalytics')
+            assert page.evaluate("dataLayer.map(x=>Array.from(x)).filter(x=>x[0]==='event').length") == 0
+            page.evaluate("OrqelisAnalytics.navigationEvent('login')")
             page.locator('.analytics-settings').click()
             page.locator('[data-analytics-deny]').click()
             page.wait_for_timeout(300)
             before = len(google)
             page.reload()
             assert len(google) == before
+            assert page.evaluate("sessionStorage.getItem('orqelis.analytics-navigation.v1')") is None
+            page.evaluate("OrqelisAnalytics.navigationEvent('login')")
+            assert page.evaluate("sessionStorage.getItem('orqelis.analytics-navigation.v1')") is None
             for language in ['en', 'de', 'fr', 'es', 'it', 'nl', 'pl', 'pt']:
                 path = '/' if language == 'en' else '/' + language + '/'
                 page.goto('https://orqelis.pro' + path)
