@@ -93,7 +93,12 @@ def main():
                 assert page.evaluate("localStorage.getItem('orqelis.language')") == language
                 for width in [1440, 390]:
                     page.set_viewport_size({'width': width, 'height': 900})
-                    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                    # CDP viewport changes can complete before the next rendered frame.
+                    # Keep the overflow check, but wait for responsive layout to settle.
+                    page.evaluate('document.fonts.ready')
+                    page.evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+                    dimensions = page.evaluate('({scroll:document.documentElement.scrollWidth, viewport:innerWidth})')
+                    assert dimensions['scroll'] <= dimensions['viewport'], (language, width, dimensions)
             assert not errors, errors
             page.screenshot(path=str(root / 'public-mobile.png'))
             browser.close()
